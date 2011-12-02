@@ -2,48 +2,63 @@ package hltest
 
 // Church Numerals
 
-sealed trait Num {
-  type Self <: Num
+sealed trait Nat {
+  type Self <: Nat
   type Apply[_]
-  type ApplyNum[_ <: Num] <: Num
-  type Succ = Inc[Self]
-  type Add[T <: Num] = ApplyNum[T]
+  type + [_ <: Nat] <: Nat
+  type * [_ <: Nat] <: Nat
+  type ++ = Succ[Self]
   def self: Self
-  def apply[T](z: T)(f: T => T): T
-  def succ: Succ = Inc[Self](self)
-  def + [T <: Num](n: T): Add[T]
+  def ++ : ++ = new Succ[Self](value+1)
+  def + [T <: Nat](n: T): +[T]
+  def value: Int
+  override def toString = value.toString
 }
 
-object Num {
+object Nat {
+  def apply(value: Int): Nat =
+    if(value == null) Zero else new Succ(value)
   type _0 = Zero.type
-  type _1 = _0.Succ
-  type _2 = _1.Succ
-  type _3 = _2.Succ
-  type _4 = _3.Succ
+  type _1 = _0 # ++
+  type _2 = _1 # ++
+  type _3 = _2 # ++
+  type _4 = _3 # ++
+  type _5 = _4 # ++
+  type _6 = _5 # ++
+  type _7 = _6 # ++
+  type _8 = _7 # ++
+  type _9 = _8 # ++
   val _0 = Zero
-  val _1 = _0.succ
-  val _2 = _1.succ
-  val _3 = _2.succ
-  val _4 = _3.succ
+  val _1 = _0 ++
+  val _2 = _1 ++
+  val _3 = _2 ++
+  val _4 = _3 ++
+  val _5 = _4 ++
+  val _6 = _5 ++
+  val _7 = _6 ++
+  val _8 = _7 ++
+  val _9 = _8 ++
 }
 
-final case object Zero extends Num {
+final object Zero extends Nat {
   type Self = Zero.type
   type Apply[X] = X
-  type ApplyNum[X <: Num] = X
+  type + [X <: Nat] = X
+  type * [_ <: Nat] = Self
   def self = this
-  def apply[T](z: T)(f: T => T) = z
-  def + [T <: Num](n: T): Add[T] = n
+  def value = 0
+  def + [T <: Nat](n: T): +[T] = n
 }
 
-final case class Inc[N <: Num](pred: N) extends Num {
-  type Self = Inc[N]
-  type Pred = N
+final class Succ[N <: Nat] private[hltest] (val value: Int) extends Nat {
+  type Self = Succ[N]
+  type -- = N
   type Apply[X] = N#Apply[X]
-  type ApplyNum[X <: Num] = Inc[N#ApplyNum[X]]
+  type + [X <: Nat] = Succ[N # + [X]]
+  type * [X <: Nat] = (-- # * [X]) # + [X]
   def self = this
-  def apply[T](z: T)(f: T => T) = f(pred.apply(z)(f))
-  def + [T <: Num](n: T): Add[T] = Inc(pred + n)
+  def pred: -- = (if(value == 1) Zero else new Succ(value-1)).asInstanceOf[--]
+  def + [T <: Nat](n: T): +[T] = new Succ[+[T] # --](value + n.value)
 }
 
 // HList
@@ -73,11 +88,12 @@ object HNil extends HList {
 object HLTest extends App {
 
   {
-    import Num._;
-    (_2 + _2): _4
-    (_3 + _0): _3
-    (_0 + _2): _2
-    (_1 + _2): _3
+    import Nat._;
+    println( (_2 + _2): _4 )
+    println( (_3 + _0): _3 )
+    println( (_0 + _2): _2 )
+    println( (_1 + _2): _3 )
+    println( (_2 * _3): _6 )
   }
 
   val l1 = 42 :: "foo" :: 1.0 :: "bar" :: HNil
