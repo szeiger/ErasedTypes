@@ -1,17 +1,18 @@
 package hltest
+import scala.annotation.tailrec
 
 // Church Numerals
 
 sealed trait Nat {
   type Self <: Nat
-  type Apply[F[_], _]
+  type Fold[U, F[_ <: U] <: U, _ <: U]
   type + [_ <: Nat] <: Nat
   type * [_ <: Nat] <: Nat
   type Flip_^ [_ <: Nat] <: Nat
   type ^ [T <: Nat] = T # Flip_^[Self]
   type ++ = Succ[Self]
   def self: Self
-  def ++ : ++ = new Succ[Self](value+1)
+  def ++ = Nat.unsafe[++](value+1)
   def + [T <: Nat](n: T): +[T] = Nat.unsafe[+[T]](value + n.value)
   def * [T <: Nat](n: T): *[T] = Nat.unsafe[*[T]](value * n.value)
   def ^ [T <: Nat](n: T): ^[T] = Nat.unsafe[^[T]](Math.pow(value, n.value).asInstanceOf[Int])
@@ -41,7 +42,7 @@ sealed trait Nat {
 
 object Nat {
   def unsafe[T <: Nat](value: Int) =
-    (if(value == 0) Zero else new Succ(value)).asInstanceOf[T]
+    (if(value < cached.length) cached(value) else new Succ(value)).asInstanceOf[T]
   type _0 = Zero.type
   type _1 = _0 # ++
   type _2 = _1 # ++
@@ -54,24 +55,25 @@ object Nat {
   type _9 = _8 # ++
   type _10 = _9 # ++
   val _0: _0 = Zero
-  val _1: _1 = _0 ++
-  val _2: _2 = _1 ++
-  val _3: _3 = _2 ++
-  val _4: _4 = _3 ++
-  val _5: _5 = _4 ++
-  val _6: _6 = _5 ++
-  val _7: _7 = _6 ++
-  val _8: _8 = _7 ++
-  val _9: _9 = _8 ++
-  val _10: _10 = _9 ++
+  val _1 = new Succ(1).asInstanceOf[_1]
+  val _2 = new Succ(2).asInstanceOf[_2]
+  val _3 = new Succ(3).asInstanceOf[_3]
+  val _4 = new Succ(4).asInstanceOf[_4]
+  val _5 = new Succ(5).asInstanceOf[_5]
+  val _6 = new Succ(6).asInstanceOf[_6]
+  val _7 = new Succ(7).asInstanceOf[_7]
+  val _8 = new Succ(8).asInstanceOf[_8]
+  val _9 = new Succ(9).asInstanceOf[_9]
+  val _10 = new Succ(10).asInstanceOf[_10]
+  private[this] val cached = Array(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10)
 }
 
 final object Zero extends Nat {
   type Self = Zero.type
-  type Apply[F[_], X] = X
+  type Fold[U, F[_ <: U] <: U, X <: U] = X
   type + [X <: Nat] = X
-  type * [_ <: Nat] = Self
-  type Flip_^ [_ <: Nat] = ++
+  type * [_ <: Nat] = Nat._0
+  type Flip_^ [_ <: Nat] = Nat._1
   def self = this
   def value = 0
 }
@@ -79,20 +81,48 @@ final object Zero extends Nat {
 final class Succ[N <: Nat] private[hltest] (val value: Int) extends Nat {
   type Self = Succ[N]
   type -- = N
-  type Apply[F[_], X] = F[N#Apply[F, X]]
+  type Fold[U, F[_ <: U] <: U, X <: U] = N#Fold[U, F, F[X]]
   type + [X <: Nat] = Succ[N # + [X]]
-  type * [X <: Nat] = (-- # * [X]) # + [X]
-  type Flip_^ [X <: Nat] = (-- # Flip_^ [X]) # * [X]
+  type * [X <: Nat] = (N # * [X]) # + [X]
+  type Flip_^ [X <: Nat] = (N # Flip_^ [X]) # * [X]
   def self = this
-  def -- : -- = (if(value == 1) Zero else new Succ(value-1)).asInstanceOf[--]
+  def -- : -- = Nat.unsafe[--](value-1)
 }
 
 // HList
 
 trait HList {
   type Self <: HList
+  type Head
+  type Tail <: HList
+  type Drop[N <: Nat] = N#Fold[HList, ({ type L[X <: HList] = X#Tail })#L, Self]
   def self: Self
   def :: [E](elem: E) = new HCons[E, Self](elem, self)
+  def drop [N <: Nat](n: N): Drop[N] = {
+    var t: HList = this
+    var i = n.value
+    while(i > 0) {
+      i -= 1
+      t = t.asInstanceOf[HCons[_,_ <: HList]].tail 
+    }
+  }.asInstanceOf[Drop[N]]
+  def apply [N <: Nat](n: N): Drop[N]#Head = drop(n).head
+  def foreach(f: Any => Unit) {
+    var n: HList = this
+    while(n.isInstanceOf[HCons[_,_]]) {
+      val c = n.asInstanceOf[HCons[_, _ <: HList]]
+      f(c.head)
+      n = c.tail
+    }
+  }
+  override def toString = {
+    val b = new StringBuffer
+    foreach { v =>
+      b append v append " :: "
+    }
+    b append "HNil"
+    b toString
+  }
 }
 
 class HCons[H, T <: HList](val head: H, val tail: T) extends HList {
@@ -104,15 +134,16 @@ class HCons[H, T <: HList](val head: H, val tail: T) extends HList {
 
 object HNil extends HList {
   type Self = HNil.type
+  type Head = Nothing
+  type Tail = Nothing
   def self = HNil
 }
 
 
 
-
-
 object HLTest extends App {
 
+  // Test the Church Numerals
   {
     import Nat._;
     println( (_2 + _2): _4 )
@@ -125,15 +156,24 @@ object HLTest extends App {
     println( _1._0: _10 )
     println( _1._6: (_8 # * [_2]) )
     
-    val x: List[List[List[String]]] = (null: _3#Apply[List, String])
+    val x: List[List[List[String]]] = (null: _3#Fold[Any, List, String])
   }
 
-  val l1 = 42 :: "foo" :: 1.0 :: "bar" :: HNil
-  val l1a = l1.head
-  val l1b = l1.tail.head
-  val l1c = l1.tail.tail.head
-  val l1d = l1.tail.tail.tail.head
-  
-  ()
+  // Test the HList
+  {
+    val l1 = 42 :: "foo" :: 1.0 :: "bar" :: HNil
+    val l1a = l1.head
+    val l1b = l1.tail.head
+    val l1c = l1.tail.tail.head
+    val l1d = l1.tail.tail.tail.head
+    
+    println(l1)
+    //val l2 = l1.drop(Nat._3)
+	//println(l2)
+
+    val x1 = null : l1.type#Tail#Tail#Tail#Head
+    val x2 = null : Nat._3#Fold[HList, ({ type L[X <: HList] = X#Tail })#L, l1.type]#Head
+    val x3 = null : l1.type#Drop[Nat._3]#Head
+  }
 
 }
