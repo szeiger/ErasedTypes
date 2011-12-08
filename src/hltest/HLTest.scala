@@ -5,13 +5,12 @@ import scala.annotation.tailrec
 
 sealed trait Nat {
   type Self <: Nat
-  type Fold[U, F[_ <: U] <: U, _ <: U]
+  type Fold[U, F[_ <: U] <: U, Z <: U] <: U
   type + [_ <: Nat] <: Nat
   type * [_ <: Nat] <: Nat
   type Flip_^ [_ <: Nat] <: Nat
   type ^ [T <: Nat] = T # Flip_^[Self]
   type ++ = Succ[Self]
-  def self: Self
   def ++ = Nat.unsafe[++](value+1)
   def + [T <: Nat](n: T): +[T] = Nat.unsafe[+[T]](value + n.value)
   def * [T <: Nat](n: T): *[T] = Nat.unsafe[*[T]](value * n.value)
@@ -70,22 +69,20 @@ object Nat {
 
 final object Zero extends Nat {
   type Self = Zero.type
-  type Fold[U, F[_ <: U] <: U, X <: U] = X
+  type Fold[U, F[_ <: U] <: U, Z <: U] = Z
   type + [X <: Nat] = X
   type * [_ <: Nat] = Nat._0
   type Flip_^ [_ <: Nat] = Nat._1
-  def self = this
   def value = 0
 }
 
 final class Succ[N <: Nat] private[hltest] (val value: Int) extends Nat {
   type Self = Succ[N]
   type -- = N
-  type Fold[U, F[_ <: U] <: U, X <: U] = N#Fold[U, F, F[X]]
+  type Fold[U, F[_ <: U] <: U, Z <: U] = F[N#Fold[U, F, Z]]
   type + [X <: Nat] = Succ[N # + [X]]
   type * [X <: Nat] = (N # * [X]) # + [X]
   type Flip_^ [X <: Nat] = (N # Flip_^ [X]) # * [X]
-  def self = this
   def -- : -- = Nat.unsafe[--](value-1)
 }
 
@@ -96,9 +93,10 @@ trait HList {
   type Head
   type Tail <: HList
   type Drop[N <: Nat] = N#Fold[HList, ({ type L[X <: HList] = X#Tail })#L, Self]
-  def self: Self
-  def :: [E](elem: E) = new HCons[E, Self](elem, self)
-  def drop [N <: Nat](n: N): Drop[N] = {
+  type Apply[N <: Nat] = Drop[N]#Head
+  def head: Head
+  def :: [E](elem: E) = new HCons[E, Self](elem, this.asInstanceOf[Self])
+  final def drop [N <: Nat](n: N): Drop[N] = {
     var t: HList = this
     var i = n.value
     while(i > 0) {
@@ -106,7 +104,7 @@ trait HList {
       t = t.asInstanceOf[HCons[_,_ <: HList]].tail 
     }
   }.asInstanceOf[Drop[N]]
-  def apply [N <: Nat](n: N): Drop[N]#Head = drop(n).head
+  final def apply [N <: Nat](n: N): Apply[N] = drop(n).head
   def foreach(f: Any => Unit) {
     var n: HList = this
     while(n.isInstanceOf[HCons[_,_]]) {
@@ -137,6 +135,7 @@ object HNil extends HList {
   type Head = Nothing
   type Tail = Nothing
   def self = HNil
+  def head = error("HNil.head")
 }
 
 
@@ -161,19 +160,22 @@ object HLTest extends App {
 
   // Test the HList
   {
-    val l1 = 42 :: "foo" :: 1.0 :: "bar" :: HNil
+    val l1 = 42 :: "foo" :: Some(1.0) :: "bar" :: HNil
     val l1a = l1.head
     val l1b = l1.tail.head
     val l1c = l1.tail.tail.head
     val l1d = l1.tail.tail.tail.head
     
     println(l1)
-    //val l2 = l1.drop(Nat._3)
-	//println(l2)
+    val l2 = l1.drop(Nat._3)
+	  println(l2)
+    val e0: Int = l1(Nat._0)
+    val e2a: Option[Double] = l1.apply(Nat._2)
+    val e2b: Option[Double] = l1.drop(Nat._2).head
 
     val x1 = null : l1.type#Tail#Tail#Tail#Head
-    val x2 = null : Nat._3#Fold[HList, ({ type L[X <: HList] = X#Tail })#L, l1.type]#Head
-    val x3 = null : l1.type#Drop[Nat._3]#Head
+    val x2 = null : Nat._3#Fold[HList, ({ type L[X <: HList] = X#Tail })#L, l1.type#Self]#Head
+    val x3: Option[Double] = null : l1.type#Drop[Nat._2]#Head
   }
 
 }
