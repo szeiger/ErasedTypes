@@ -92,9 +92,11 @@ trait HList {
   type Self <: HList
   type Head
   type Tail <: HList
+  type Length <: Nat
   type Drop[N <: Nat] = N#Fold[HList, ({ type L[X <: HList] = X#Tail })#L, Self]
-  type Apply[N <: Nat] = Drop[N]#Head
+  type Apply[N <: Nat] = ({ type L[X <: HList] = X#Head })#L[Drop[N]] // Drop[N]#Head
   def head: Head
+  def length: Length
   def :: [E](elem: E) = new HCons[E, Self](elem, this.asInstanceOf[Self])
   final def drop [N <: Nat](n: N): Drop[N] = {
     var t: HList = this
@@ -103,8 +105,9 @@ trait HList {
       i -= 1
       t = t.asInstanceOf[HCons[_,_ <: HList]].tail 
     }
+    t
   }.asInstanceOf[Drop[N]]
-  final def apply [N <: Nat](n: N): Apply[N] = drop(n).head
+  final def apply [N <: Nat](n: N) = drop(n).head.asInstanceOf[Apply[N]]
   def foreach(f: Any => Unit) {
     var n: HList = this
     while(n.isInstanceOf[HCons[_,_]]) {
@@ -127,6 +130,8 @@ class HCons[H, T <: HList](val head: H, val tail: T) extends HList {
   type Head = H
   type Tail = T
   type Self = HCons[H, T]
+  type Length = T#Length # ++
+  def length = tail.length++
   def self = this
 }
 
@@ -134,8 +139,10 @@ object HNil extends HList {
   type Self = HNil.type
   type Head = Nothing
   type Tail = Nothing
+  type Length = Zero.type
   def self = HNil
   def head = error("HNil.head")
+  def length = Nat._0
 }
 
 
@@ -176,6 +183,9 @@ object HLTest extends App {
     val x1 = null : l1.type#Tail#Tail#Tail#Head
     val x2 = null : Nat._3#Fold[HList, ({ type L[X <: HList] = X#Tail })#L, l1.type#Self]#Head
     val x3: Option[Double] = null : l1.type#Drop[Nat._2]#Head
+
+    implicitly[l1.Length <:< Nat._4]
+    implicitly[l2.Length <:< Nat._1]
   }
 
 }
