@@ -77,6 +77,7 @@ final object Zero extends Nat {
 }
 
 final class Succ[N <: Nat] private[hltest] (val value: Int) extends Nat {
+  //def this(p: N) = this(p.value+1)
   type Self = Succ[N]
   type -- = N
   type Fold[U, F[_ <: U] <: U, Z <: U] = F[N#Fold[U, F, Z]]
@@ -86,18 +87,42 @@ final class Succ[N <: Nat] private[hltest] (val value: Int) extends Nat {
   def -- : -- = Nat.unsafe[--](value-1)
 }
 
+// Typed Functions
+
+trait TypedF2[T1, T2, TR, F[_ <: T1, _ <: T2] <: TR] {
+  def apply[P1 <: T1, P2 <: T2](p1: P1, p2: P2): F[P1, P2]
+}
+
 // HList
 
-trait HList {
+sealed trait HList {
   type Self <: HList
   type Head
   type Tail <: HList
-  type Length <: Nat
+  type Fold[U, F[_ <: HList, _ <: U] <: U, Z <: U] <: U
+  
   type Drop[N <: Nat] = N#Fold[HList, ({ type L[X <: HList] = X#Tail })#L, Self]
   type Apply[N <: Nat] = ({ type L[X <: HList] = X#Head })#L[Drop[N]] // Drop[N]#Head
+  type Length = Fold[Nat, ({ type L[X <: HList, Z <: Nat] = Succ[Z] })#L, Nat._0]
+  type |: [E] = HCons[E, Self]
+  type |:: [L <: HList] = L#Fold[HList, ({ type L[X <: HList, Z <: HList] = Z # |: [X#Head] })#L, Self] 
+
   def head: Head
-  def length: Length
-  def :: [E](elem: E) = new HCons[E, Self](elem, this.asInstanceOf[Self])
+  def tail: Tail
+  def self: Self
+  def fold[U, F[_ <: HList, _ <: U] <: U, Z <: U](f: TypedF2[HList, U, U, F], z: Z): Fold[U, F, Z]
+
+  final def length: Length = {
+    var i = 0
+    foreach { _ => i += 1 }
+    Nat.unsafe[Length](i)
+  }
+  final def |: [E](elem: E): |: [E] = new HCons[E, Self](elem, this.asInstanceOf[Self])
+  final def |:: [L <: HList](l: L): |:: [L] = l.fold[HList, ({ type L[X <: HList, Z <: HList] = Z # |: [X#Head] })#L, Self](
+      new TypedF2[HList, HList, HList, ({ type L[X <: HList, Z <: HList] = Z # |: [X#Head] })#L] {
+        def apply[P1 <: HList, P2 <: HList](p1: P1, p2: P2) = p1.head |: p2
+      }, self)
+
   final def drop [N <: Nat](n: N): Drop[N] = {
     var t: HList = this
     var i = n.value
@@ -108,7 +133,7 @@ trait HList {
     t
   }.asInstanceOf[Drop[N]]
   final def apply [N <: Nat](n: N) = drop(n).head.asInstanceOf[Apply[N]]
-  def foreach(f: Any => Unit) {
+  final def foreach(f: Any => Unit) {
     var n: HList = this
     while(n.isInstanceOf[HCons[_,_]]) {
       val c = n.asInstanceOf[HCons[_, _ <: HList]]
@@ -116,33 +141,43 @@ trait HList {
       n = c.tail
     }
   }
-  override def toString = {
+  override final def toString = {
     val b = new StringBuffer
     foreach { v =>
-      b append v append " :: "
+      b append v append " |: "
     }
     b append "HNil"
     b toString
   }
 }
 
-class HCons[H, T <: HList](val head: H, val tail: T) extends HList {
-  type Head = H
-  type Tail = T
-  type Self = HCons[H, T]
-  type Length = T#Length # ++
-  def length = tail.length++
-  def self = this
+final object HList {
+  type HNil = HNil.type
+  type |: [H, T <: HList] = HCons[H, T]
+  type ||: [H, N] = HCons[H, HCons[N, HNil]]
 }
 
-object HNil extends HList {
+final class HCons[H, T <: HList](val head: H, val tail: T) extends HList {
+  type Self = HCons[H, T]
+  type Head = H
+  type Tail = T
+  type Fold[U, F[_ <: HList, _ <: U] <: U, Z <: U] = F[Self, T#Fold[U, F, Z]]
+
+  def self = this
+  def fold[U, F[_ <: HList, _ <: U] <: U, Z <: U](f: TypedF2[HList, U, U, F], z: Z) =
+    f.apply[Self, T#Fold[U, F, Z]](self, tail.fold[U, F, Z](f, z))
+}
+
+final object HNil extends HList {
   type Self = HNil.type
   type Head = Nothing
   type Tail = Nothing
-  type Length = Zero.type
+  type Fold[U, F[_ <: HList, _ <: U] <: U, Z <: U] = Z
+
   def self = HNil
   def head = error("HNil.head")
-  def length = Nat._0
+  def tail = error("HNil.tail")
+  def fold[U, F[_ <: HList, _ <: U] <: U, Z <: U](f: TypedF2[HList, U, U, F], z: Z) = z
 }
 
 
@@ -167,7 +202,7 @@ object HLTest extends App {
 
   // Test the HList
   {
-    val l1 = 42 :: "foo" :: Some(1.0) :: "bar" :: HNil
+    val l1 = 42 |: "foo" |: Some(1.0) |: "bar" |: HNil
     val l1a = l1.head
     val l1b = l1.tail.head
     val l1c = l1.tail.tail.head
@@ -186,6 +221,14 @@ object HLTest extends App {
 
     implicitly[l1.Length <:< Nat._4]
     implicitly[l2.Length <:< Nat._1]
+    
+    println((l1.length, l2.length))
+
+    import HList._
+    val l3a = "foo" |: 42 |: HNil
+    val l3b = true |: "baz" |: Some(1.0) |: HNil
+    val l3 = l3a |:: l3b
+    println(l3 : String |: Int |: Boolean |: String ||: Some[Double])
   }
 
 }
