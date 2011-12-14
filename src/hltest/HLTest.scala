@@ -93,6 +93,13 @@ trait TypedF2[T1, T2, TR, F[_ <: T1, _ <: T2] <: TR] {
   def apply[P1 <: T1, P2 <: T2](p1: P1, p2: P2): F[P1, P2]
 }
 
+// Type Computations
+
+object Types {
+  //type Lower[A, B] = 
+  //type Max[A, B] =
+}
+
 // HList
 
 sealed trait HList {
@@ -180,6 +187,27 @@ final object HNil extends HList {
   def fold[U, F[_ <: HList, _ <: U] <: U, Z <: U](f: TypedF2[HList, U, U, F], z: Z) = z
 }
 
+// HArray
+
+sealed trait HArray[L <: HList] {
+  def apply[N <: Nat](n: N): L#Apply[N]
+  def length: L#Length
+}
+
+object HArray {
+  import HList._
+  def unsafe[L <: HList](a: Array[Any]): HArray[L] = new HArrayA[L](a)
+  def apply[T1](v1: T1) = unsafe[T1 |: HNil](Array(v1))
+  def apply[T1, T2](v1: T1, v2: T2) = unsafe[T1 ||: T2](Array(v1, v2))
+  def apply[T1, T2, T3](v1: T1, v2: T2, v3: T3) = unsafe[T1 |: T2 ||: T3](Array(v1, v2, v3))
+}
+
+final class HArrayA[L <: HList](a: Array[Any]) extends HArray[L] {
+  def apply[N <: Nat](n: N) = a(n.value).asInstanceOf[L#Apply[N]]
+  def length = a.length.asInstanceOf[L#Length]
+  override def toString = a.mkString("(",",",")")
+}
+
 
 
 object HLTest extends App {
@@ -231,4 +259,12 @@ object HLTest extends App {
     println(l3 : String |: Int |: Boolean |: String ||: Some[Double])
   }
 
+  // Test the HArray
+  {
+    val v1 = HArray("foo", 42, true)
+    println(v1)
+    println(v1(Nat._0): String)
+    println(v1(Nat._1): Int)
+    println(v1(Nat._2): Boolean)
+  }
 }
