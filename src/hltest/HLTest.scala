@@ -96,7 +96,10 @@ trait TypedF2[T1, T2, TR, F[_ <: T1, _ <: T2] <: TR] {
 // Type Computations
 
 object Types {
-  //type Lower[A, B] = 
+  trait Result[T]
+  def lower[A, B, T](implicit l: Lower[A,B,T]): Result[T] = null
+  //type Lower[A, B] =
+  
   //type Max[A, B] =
 }
 
@@ -189,9 +192,23 @@ final object HNil extends HList {
 
 // HArray
 
-sealed trait HArray[L <: HList] {
+sealed trait HArray[L <: HList] extends Product {
   def apply[N <: Nat](n: N): L#Apply[N]
   def length: L#Length
+  def productArity = 5
+  def canEqual(that: Any) = that.isInstanceOf[HArray[_]]
+  override def equals(that: Any): Boolean = that match {
+    case h: HArray[_] =>
+      var l = productArity
+      if(l != h.productArity) return false
+      var i = 0
+      while(i < l) {
+        if(productElement(i) != h.productElement(i)) return false
+        i += 1
+      }
+      true
+    case _ => false
+  }
 }
 
 object HArray {
@@ -206,6 +223,7 @@ final class HArrayA[L <: HList](a: Array[Any]) extends HArray[L] {
   def apply[N <: Nat](n: N) = a(n.value).asInstanceOf[L#Apply[N]]
   def length = a.length.asInstanceOf[L#Length]
   override def toString = a.mkString("(",",",")")
+  def productElement(n: Int) = a(n)
 }
 
 
