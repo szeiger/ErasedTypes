@@ -93,16 +93,6 @@ trait TypedF2[T1, T2, TR, F[_ <: T1, _ <: T2] <: TR] {
   def apply[P1 <: T1, P2 <: T2](p1: P1, p2: P2): F[P1, P2]
 }
 
-// Type Computations
-
-object Types {
-  trait Result[T]
-  def lower[A, B, T](implicit l: Lower[A,B,T]): Result[T] = null
-  //type Lower[A, B] =
-  
-  //type Max[A, B] =
-}
-
 // HList
 
 sealed trait HList {
@@ -127,7 +117,7 @@ sealed trait HList {
     foreach { _ => i += 1 }
     Nat.unsafe[Length](i)
   }
-  final def |: [E](elem: E): |: [E] = new HCons[E, Self](elem, this.asInstanceOf[Self])
+  final def |: [@specialized E](elem: E): |: [E] = new HCons[E, Self](elem, this.asInstanceOf[Self])
   final def |:: [L <: HList](l: L): |:: [L] = l.fold[HList, ({ type L[X <: HList, Z <: HList] = Z # |: [X#Head] })#L, Self](
       new TypedF2[HList, HList, HList, ({ type L[X <: HList, Z <: HList] = Z # |: [X#Head] })#L] {
         def apply[P1 <: HList, P2 <: HList](p1: P1, p2: P2) = p1.head |: p2
@@ -167,7 +157,7 @@ final object HList {
   type ||: [H, N] = HCons[H, HCons[N, HNil]]
 }
 
-final class HCons[H, T <: HList](val head: H, val tail: T) extends HList {
+final class HCons[@specialized H, T <: HList](val head: H, val tail: T) extends HList {
   type Self = HCons[H, T]
   type Head = H
   type Tail = T
@@ -188,6 +178,13 @@ final object HNil extends HList {
   def head = error("HNil.head")
   def tail = error("HNil.tail")
   def fold[U, F[_ <: HList, _ <: U] <: U, Z <: U](f: TypedF2[HList, U, U, F], z: Z) = z
+}
+
+// KList
+
+trait KList[M[_], L <: HList] {
+  type Head = L#Head
+  type Tail <: KList[M, HList#Tail]
 }
 
 // HArray
@@ -275,6 +272,10 @@ object HLTest extends App {
     val l3b = true |: "baz" |: Some(1.0) |: HNil
     val l3 = l3a |:: l3b
     println(l3 : String |: Int |: Boolean |: String ||: Some[Double])
+
+    val l4 = new HCons(42, new HCons(10.d, HNil))
+    println(l4.getClass)
+    println(l4.tail.getClass)
   }
 
   // Test the HArray
