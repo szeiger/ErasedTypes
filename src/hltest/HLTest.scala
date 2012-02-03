@@ -16,27 +16,28 @@ sealed trait Nat {
   def * [T <: Nat](n: T): *[T] = Nat.unsafe[*[T]](value * n.value)
   def ^ [T <: Nat](n: T): ^[T] = Nat.unsafe[^[T]](Math.pow(value, n.value).asInstanceOf[Int])
   def value: Int
+  def self: Self
   override def toString = value.toString
-  type _0 = *[Nat._10]
-  type _1 = _0 # ++
-  type _2 = _1 # ++
-  type _3 = _2 # ++
-  type _4 = _3 # ++
-  type _5 = _4 # ++
-  type _6 = _5 # ++
-  type _7 = _6 # ++
-  type _8 = _7 # ++
-  type _9 = _8 # ++
-  def _0 = this * Nat._10
-  def _1 = _0 + Nat._1
-  def _2 = _0 + Nat._2
-  def _3 = _0 + Nat._3
-  def _4 = _0 + Nat._4
-  def _5 = _0 + Nat._5
-  def _6 = _0 + Nat._6
-  def _7 = _0 + Nat._7
-  def _8 = _0 + Nat._8
-  def _9 = _0 + Nat._9
+  type _0 = Self # * [Nat._10]
+  type _1 = _0 # + [Nat._1]
+  type _2 = _0 # + [Nat._2]
+  type _3 = _0 # + [Nat._3]
+  type _4 = _0 # + [Nat._4]
+  type _5 = _0 # + [Nat._5]
+  type _6 = _0 # + [Nat._6]
+  type _7 = _0 # + [Nat._7]
+  type _8 = _0 # + [Nat._8]
+  type _9 = _0 # + [Nat._9]
+  def _0 = (self * Nat._10): _0
+  def _1 = (_0 + Nat._1): _1
+  def _2 = (_0 + Nat._2): _2
+  def _3 = (_0 + Nat._3): _3
+  def _4 = (_0 + Nat._4): _4
+  def _5 = (_0 + Nat._5): _5
+  def _6 = (_0 + Nat._6): _6
+  def _7 = (_0 + Nat._7): _7
+  def _8 = (_0 + Nat._8): _8
+  def _9 = (_0 + Nat._9): _9
 }
 
 object Nat {
@@ -74,6 +75,7 @@ final object Zero extends Nat {
   type * [_ <: Nat] = Nat._0
   type Flip_^ [_ <: Nat] = Nat._1
   def value = 0
+  def self = this
 }
 
 final class Succ[N <: Nat] private[hltest] (val value: Int) extends Nat {
@@ -85,6 +87,7 @@ final class Succ[N <: Nat] private[hltest] (val value: Int) extends Nat {
   type * [X <: Nat] = (N # * [X]) # + [X]
   type Flip_^ [X <: Nat] = (N # Flip_^ [X]) # * [X]
   def -- : -- = Nat.unsafe[--](value-1)
+  def self = this
 }
 
 // Typed Functions
@@ -239,6 +242,10 @@ object HLTest extends App {
     println( (_3 ^ _2): _9 )
     println( _1._0: _10 )
     println( _1._6: (_8 # * [_2]) )
+    
+    implicitly[_1._6 =:= (_4 # * [_4])]
+    implicitly[(_1._5 # ++) =:= (_4 # * [_4])]
+    implicitly[(_1 # * [_10] # + [_6]) =:= (_4 # * [_4])]
     
     val x: List[List[List[String]]] = (null: _3#Fold[Any, List, String])
   }
