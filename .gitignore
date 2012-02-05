@@ -1,5 +1,10 @@
 /bin/
 /.settings/
-/.cache
-/.classpath
-/.project
+/.idea/
+target/
+*.log
+*.iml
+/\.target/
+/\.cache
+/\.project
+/\.classpath
