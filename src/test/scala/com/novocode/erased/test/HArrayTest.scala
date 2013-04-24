@@ -18,5 +18,9 @@ class HArrayTest {
     println(v1._1: String)
     println(v1._2: Int)
     println(v1._3: Boolean)
+
+    // Ensure that the accessors generate stable paths
+    import v1._1.length
+    ()
   }
 }

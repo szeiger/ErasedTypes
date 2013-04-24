@@ -51,8 +51,17 @@ object HArray {
       AppliedTypeTree(Ident(_Succ), List(z))
     }
 
+    /*
+    val _unsafeApply = newTermName("unsafeApply")
+    val _HArray = typeOf[HArray[_]].typeSymbol
+    val u = _HArray.typeSignature.declaration(_unsafeApply).asInstanceOf[scala.reflect.internal.Symbols#Symbol].setFlag(scala.reflect.internal.Flags.STABLE)
+    println(u)
+    */
+
     val t = Apply(TypeApply(Select(ctx.prefix.tree, newTermName("unsafeApply")),
       List(natT)), List(Literal(Constant(idx))))
+
+    //reify({ @scala.annotation.unchecked.uncheckedStable val tmp = ctx.Expr[Any](t).splice; tmp })
     ctx.Expr[Any](t)
   }
 }
