@@ -4,8 +4,12 @@ name := "erased-types"
 
 version := "0.1-SNAPSHOT"
 
-scalaVersion := "2.9.1"
+scalaVersion := "2.10.1"
 
-scalacOptions ++= Seq("-deprecation", "-Ydependent-method-types", "-unchecked")
+scalacOptions ++= Seq("-deprecation", "-unchecked")
 
-libraryDependencies += "com.novocode" % "junit-interface" % "0.8" % "test"
+//scalacOptions ++= Seq("-deprecation", "-unchecked", "-uniqid", "-Xprint:typer")
+
+libraryDependencies += "com.novocode" % "junit-interface" % "0.10-M4" % "test"
+
+libraryDependencies <+= scalaVersion("org.scala-lang" % "scala-compiler" % _ % "compile")

@@ -8,3 +8,5 @@ target/
 /\.cache
 /\.project
 /\.classpath
+.history
+.DS_Store
