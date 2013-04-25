@@ -52,4 +52,15 @@ class HArrayTest {
     assertEquals(HArray("foo", 42), r2)
     assertEquals("foo", r3)
   }
+
+  @Test def testSpecialization {
+    val h1 = HArray("foo", 42, true)
+    val h2 = HArray("foo", 42)
+
+    val h1t: HArrayA[String |: Int ||: Boolean] = h1
+    val h2t: HArray2[String, Int] = h2
+
+    val i: Int = h2t._2
+    assertEquals(42, i)
+  }
 }

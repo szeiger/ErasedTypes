@@ -3,12 +3,13 @@ package com.novocode.erased
 import scala.language.dynamics
 import scala.language.experimental.macros
 import scala.reflect.macros.Context
+import HList._
 
 // HArray
 
 sealed trait HArray[+L <: HList] extends Any with Product with Dynamic {
   @inline final def apply[N <: Nat](n: N) = unsafeApply[N](n.value)
-  def unsafeApply[N <: Nat](n: Int): L#Apply[N]
+  def unsafeApply[N <: Nat](n: Int): L#Apply[N] = productElement(n).asInstanceOf[L#Apply[N]]
   def length: L#Length
   def canEqual(that: Any) = that.isInstanceOf[HArray[_]]
   override def equals(that: Any): Boolean = that match {
@@ -24,11 +25,24 @@ sealed trait HArray[+L <: HList] extends Any with Product with Dynamic {
     case _ =>
       false
   }
+  override def toString = {
+    val b = new StringBuilder
+    b append "("
+    val l = productArity
+    var i = 0
+    while(i < l) {
+      if(i != 0) b append ","
+      b append productElement(i)
+      i += 1
+    }
+    b append ")"
+    b.toString
+  }
+
   def selectDynamic(field: String): Any = macro HArray.selectDynamicImpl
 }
 
 object HArray {
-  import HList._
   def unsafe[L <: HList](a: Array[Any]): HArray[L] = new HArrayA[L](a)
 
   def apply(vs: Any*) = macro HArray.applyImpl
@@ -39,31 +53,52 @@ object HArray {
     else {
       vs.head.tree match {
         case Typed(seq, Ident(tpnme.WILDCARD_STAR)) =>
-          val s = Seq(1,2,3)
           reify(unsafe[HList](Array[Any](ctx.Expr[Seq[Any]](seq).splice: _*)))
         case _ =>
-          val t = Apply(
-            TypeApply(
-              Select(Ident(typeOf[HArray[_]].typeSymbol.companionSymbol), newTermName("unsafe")),
-              List(
-                vs.foldRight[Tree](Select(Ident(typeOf[HList].typeSymbol.companionSymbol), newTypeName("HNil"))) { case (n, z) =>
-                  AppliedTypeTree(Ident(typeOf[HCons[_, _]].typeSymbol), List(TypeTree(n.tree.tpe.widen), z))
-                }
-              )
-            ),
-            List(
-              Apply(
-                Apply(
-                  Select(Ident(typeOf[Array[_]].typeSymbol.companionSymbol), newTermName("apply")),
-                  vs.map(_.tree).toList
+          val _HArrayA = typeOf[HArrayA[_]].typeSymbol
+          val _HArray2 = typeOf[HArray2[_,_]].typeSymbol
+          val _HList = typeOf[HList].typeSymbol.companionSymbol
+          val _HCons = typeOf[HCons[_, _]].typeSymbol
+          val _Array = typeOf[Array[_]].typeSymbol.companionSymbol
+          val _Predef = typeOf[Predef.type].typeSymbol.companionSymbol
+          ctx.Expr(if(vs.length == 2) {
+            // new HArray2
+            Apply(
+              Select(
+                New(
+                  AppliedTypeTree(
+                    Ident(_HArray2),
+                    vs.iterator.map(n => TypeTree(n.tree.tpe.widen)).toList
+                  )
                 ),
-                List(
-                  Select(Ident(typeOf[Predef.type].typeSymbol.companionSymbol), newTermName("implicitly"))
+                nme.CONSTRUCTOR
+              ),
+              vs.iterator.map(_.tree).toList
+            )
+          } else {
+            // new HArrayA
+            Apply(
+              Select(
+                New(
+                  AppliedTypeTree(
+                    Ident(_HArrayA),
+                    List(
+                      vs.foldRight[Tree](Select(Ident(_HList), newTypeName("HNil"))) { case (n, z) =>
+                        AppliedTypeTree(Ident(_HCons), List(TypeTree(n.tree.tpe.widen), z))
+                      }
+                    )
+                  )
+                ),
+                nme.CONSTRUCTOR
+              ),
+              List(
+                Apply(
+                  Apply(Select(Ident(_Array), newTermName("apply")), vs.map(_.tree).toList),
+                  List(Select(Ident(_Predef), newTermName("implicitly")))
                 )
               )
             )
-          )
-          ctx.Expr(t)
+          })
       }
     }
   }
@@ -92,9 +127,18 @@ object HArray {
 }
 
 final class HArrayA[L <: HList](val a: Array[Any]) extends HArray[L] {
-  def unsafeApply[N <: Nat](n: Int) = a(n).asInstanceOf[L#Apply[N]]
   def length = Nat.unsafe[L#Length](a.length)
   def productArity = a.length
-  override def toString = a.mkString("(",",",")")
   def productElement(n: Int) = a(n)
+}
+
+final class HArray2[@specialized(Int, Long, Double, Char, Boolean, AnyRef) +T1,
+    @specialized(Int, Long, Double, Char, Boolean, AnyRef) +T2](val _1: T1, val _2: T2) extends HArray[T1 ||: T2] {
+  def length = Nat._2
+  def productArity = 2
+  def productElement(n: Int) = n match {
+    case 0 => _1
+    case 1 => _2
+    case _ => throw new NoSuchElementException
+  }
 }
