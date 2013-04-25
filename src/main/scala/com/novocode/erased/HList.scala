@@ -1,5 +1,7 @@
 package com.novocode.erased
 
+import scala.annotation.unchecked.{uncheckedVariance => uv}
+
 // HList
 
 sealed trait HList {
@@ -60,18 +62,18 @@ sealed trait HList {
 
 final object HList {
   type HNil = HNil.type
-  type |: [H, T <: HList] = HCons[H, T]
-  type ||: [H, N] = HCons[H, HCons[N, HNil]]
+  type |: [+H, +T <: HList] = HCons[H, T]
+  type ||: [+H, +N] = HCons[H, HCons[N, HNil]]
 }
 
-final class HCons[@specialized H, T <: HList](val head: H, val tail: T) extends HList {
-  type Self = HCons[H, T]
-  type Head = H
-  type Tail = T
-  type Fold[U, F[_ <: HList, _ <: U] <: U, Z <: U] = F[Self, T#Fold[U, F, Z]]
+final class HCons[@specialized +H, +T <: HList](val head: H, val tail: T) extends HList {
+  type Self = HCons[H @uv, T @uv]
+  type Head = H @uv
+  type Tail = T @uv
+  type Fold[U, F[_ <: HList, _ <: U] <: U, Z <: U] = F[Self @uv, (T @uv)#Fold[U, F, Z]]
 
   def self = this
-  def fold[U, F[_ <: HList, _ <: U] <: U, Z <: U](f: TypedFunction2[HList, U, U, F], z: Z) =
+  def fold[U, F[_ <: HList, _ <: U] <: U, Z <: U](f: TypedFunction2[HList, U, U, F], z: Z): Fold[U, F, Z] @uv =
     f.apply[Self, T#Fold[U, F, Z]](self, tail.fold[U, F, Z](f, z))
 }
 

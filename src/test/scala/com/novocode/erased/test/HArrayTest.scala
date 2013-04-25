@@ -1,6 +1,7 @@
 package com.novocode.erased.test
 
 import org.junit.Test
+import org.junit.Assert._
 import com.novocode.erased._
 import HList._
 
@@ -29,5 +30,26 @@ class HArrayTest {
     println(h0)
     val h1 = HArray(Seq("foo", 42, true): _*)
     println(h1)
+  }
+
+  @Test
+  def testVariance {
+    val h = HArray("foo", 42, true)
+
+    def f1(h: HArray[String |: Int ||: _]) = HArray(h._1, h._2)
+    def f2(h: HArray[String |: Int ||: Any]) = HArray(h._1, h._2)
+    def f3(h: HArray[String |: HList]) = h._1
+
+    val r1 = f1(h)
+    val r2 = f2(h)
+    val r3 = f3(h)
+
+    val r1t: HArray[String ||: Int] = r1
+    val r2t: HArray[String ||: Int] = r2
+    val r3t: String = r3
+
+    assertEquals(HArray("foo", 42), r1)
+    assertEquals(HArray("foo", 42), r2)
+    assertEquals("foo", r3)
   }
 }

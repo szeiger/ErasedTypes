@@ -6,11 +6,10 @@ import scala.reflect.macros.Context
 
 // HArray
 
-sealed trait HArray[L <: HList] extends Any with Product with Dynamic {
+sealed trait HArray[+L <: HList] extends Any with Product with Dynamic {
   @inline final def apply[N <: Nat](n: N) = unsafeApply[N](n.value)
   def unsafeApply[N <: Nat](n: Int): L#Apply[N]
   def length: L#Length
-  def productArity = 5
   def canEqual(that: Any) = that.isInstanceOf[HArray[_]]
   override def equals(that: Any): Boolean = that match {
     case h: HArray[_] =>
@@ -22,7 +21,8 @@ sealed trait HArray[L <: HList] extends Any with Product with Dynamic {
         i += 1
       }
       true
-    case _ => false
+    case _ =>
+      false
   }
   def selectDynamic(field: String): Any = macro HArray.selectDynamicImpl
 }
@@ -91,9 +91,10 @@ object HArray {
   }
 }
 
-final class HArrayA[L <: HList](val a: Array[Any]) extends AnyVal with HArray[L] {
+final class HArrayA[L <: HList](val a: Array[Any]) extends HArray[L] {
   def unsafeApply[N <: Nat](n: Int) = a(n).asInstanceOf[L#Apply[N]]
-  def length = a.length.asInstanceOf[L#Length]
+  def length = Nat.unsafe[L#Length](a.length)
+  def productArity = a.length
   override def toString = a.mkString("(",",",")")
   def productElement(n: Int) = a(n)
 }
