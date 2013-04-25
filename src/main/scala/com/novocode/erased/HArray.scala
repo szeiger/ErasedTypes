@@ -30,9 +30,43 @@ sealed trait HArray[L <: HList] extends Any with Product with Dynamic {
 object HArray {
   import HList._
   def unsafe[L <: HList](a: Array[Any]): HArray[L] = new HArrayA[L](a)
-  def apply[T1](v1: T1) = unsafe[T1 |: HNil](Array(v1))
-  def apply[T1, T2](v1: T1, v2: T2) = unsafe[T1 ||: T2](Array(v1, v2))
-  def apply[T1, T2, T3](v1: T1, v2: T2, v3: T3) = unsafe[T1 |: T2 ||: T3](Array(v1, v2, v3))
+
+  def apply(vs: Any*) = macro HArray.applyImpl
+
+  def applyImpl(ctx: Context)(vs: ctx.Expr[Any]*): ctx.Expr[HArray[_]] = {
+    import ctx.universe._
+    if(vs.isEmpty) reify(unsafe[HNil](Array[Any]()))
+    else {
+      vs.head.tree match {
+        case Typed(seq, Ident(tpnme.WILDCARD_STAR)) =>
+          val s = Seq(1,2,3)
+          reify(unsafe[HList](Array[Any](ctx.Expr[Seq[Any]](seq).splice: _*)))
+        case _ =>
+          val t = Apply(
+            TypeApply(
+              Select(Ident(typeOf[HArray[_]].typeSymbol.companionSymbol), newTermName("unsafe")),
+              List(
+                vs.foldRight[Tree](Select(Ident(typeOf[HList].typeSymbol.companionSymbol), newTypeName("HNil"))) { case (n, z) =>
+                  AppliedTypeTree(Ident(typeOf[HCons[_, _]].typeSymbol), List(TypeTree(n.tree.tpe.widen), z))
+                }
+              )
+            ),
+            List(
+              Apply(
+                Apply(
+                  Select(Ident(typeOf[Array[_]].typeSymbol.companionSymbol), newTermName("apply")),
+                  vs.map(_.tree).toList
+                ),
+                List(
+                  Select(Ident(typeOf[Predef.type].typeSymbol.companionSymbol), newTermName("implicitly"))
+                )
+              )
+            )
+          )
+          ctx.Expr(t)
+      }
+    }
+  }
 
   def selectDynamicImpl(ctx: Context)(field: ctx.Expr[String]): ctx.Expr[Any] = {
     import ctx.universe._
