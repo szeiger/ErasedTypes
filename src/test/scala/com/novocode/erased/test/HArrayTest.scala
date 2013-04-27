@@ -63,4 +63,20 @@ class HArrayTest {
     val i: Int = h2t._2
     assertEquals(42, i)
   }
+
+  @Test def testIISpecialization1 {
+    val h1 = HArray("foo", 42)
+    val h2 = HArray(17, 42)
+    val h3 = HArray(17: Any, 42).asInstanceOf[HArray[Int ||: Int]]
+
+    println(addInts(h2))
+    println(addInts(h3))
+  }
+
+  def addTest: Int = {
+    val h2 = HArray(17, 42)
+    addInts(h2)
+  }
+
+  def addInts(ii: HArrayII): Int = ii._1 + ii._2
 }

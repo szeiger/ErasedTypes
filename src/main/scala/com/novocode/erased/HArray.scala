@@ -8,10 +8,10 @@ import HList._
 // HArray
 
 sealed trait HArray[+L <: HList] extends Any with Product with Dynamic {
-  @inline final def apply[N <: Nat](n: N) = unsafeApply[N](n.value)
-  def unsafeApply[N <: Nat](n: Int): L#Apply[N] = productElement(n).asInstanceOf[L#Apply[N]]
-  def length: L#Length
-  def canEqual(that: Any) = that.isInstanceOf[HArray[_]]
+  @inline final def apply[N <: Nat](n: N) = productElement(n.value).asInstanceOf[L#Apply[N]]
+  @inline final def unsafeApply[N <: Nat](n: Int): L#Apply[N] = productElement(n).asInstanceOf[L#Apply[N]]
+  @inline final def length: L#Length = Nat.unsafe[L#Length](productArity)
+  final def canEqual(that: Any) = that.isInstanceOf[HArray[_]]
   override def equals(that: Any): Boolean = that match {
     case h: HArray[_] =>
       val l = productArity
@@ -25,7 +25,7 @@ sealed trait HArray[+L <: HList] extends Any with Product with Dynamic {
     case _ =>
       false
   }
-  override def toString = {
+  override final def toString = {
     val b = new StringBuilder
     b append "("
     val l = productArity
@@ -43,7 +43,15 @@ sealed trait HArray[+L <: HList] extends Any with Product with Dynamic {
 }
 
 object HArray {
-  def unsafe[L <: HList](a: Array[Any]): HArray[L] = new HArrayA[L](a)
+  def unsafe[L <: HList](a: Array[Any]): HArray[L] = {
+    if(a.length == 2) {
+      val _1 = a(0)
+      val _2 = a(1)
+      if(_1.isInstanceOf[Int] && _2.isInstanceOf[Int])
+        HArrayII(_1.asInstanceOf[Int], _2.asInstanceOf[Int])
+      else new HArray2[Any, Any](_1, _2)
+    }.asInstanceOf[HArray[L]] else new HArrayA[L](a)
+  }
 
   def apply(vs: Any*) = macro HArray.applyImpl
 
@@ -55,50 +63,97 @@ object HArray {
         case Typed(seq, Ident(tpnme.WILDCARD_STAR)) =>
           reify(unsafe[HList](Array[Any](ctx.Expr[Seq[Any]](seq).splice: _*)))
         case _ =>
+          val _HArray = typeOf[HArray[_]].typeSymbol.companionSymbol
           val _HArrayA = typeOf[HArrayA[_]].typeSymbol
           val _HArray2 = typeOf[HArray2[_,_]].typeSymbol
           val _HList = typeOf[HList].typeSymbol.companionSymbol
           val _HCons = typeOf[HCons[_, _]].typeSymbol
           val _Array = typeOf[Array[_]].typeSymbol.companionSymbol
           val _Predef = typeOf[Predef.type].typeSymbol.companionSymbol
-          ctx.Expr(if(vs.length == 2) {
-            // new HArray2
-            Apply(
-              Select(
-                New(
-                  AppliedTypeTree(
-                    Ident(_HArray2),
-                    vs.iterator.map(n => TypeTree(n.tree.tpe.widen)).toList
-                  )
-                ),
-                nme.CONSTRUCTOR
-              ),
-              vs.iterator.map(_.tree).toList
-            )
-          } else {
-            // new HArrayA
-            Apply(
-              Select(
-                New(
-                  AppliedTypeTree(
-                    Ident(_HArrayA),
+          if(vs.length == 2) {
+            if(vs.forall(_.tree.tpe <:< definitions.IntTpe)) {
+              // All Int -> new HArrayII
+              val _1 = vs(0).asInstanceOf[Expr[Int]]
+              val _2 = vs(1).asInstanceOf[Expr[Int]]
+              reify(new HArrayII((_1.splice.toLong << 32) | (_2.splice & 0xffffffffL)))
+            } else if(vs.exists(v =>
+              (v.tree.tpe <:< definitions.BooleanTpe) ||
+              (v.tree.tpe <:< definitions.ByteTpe) ||
+              (v.tree.tpe <:< definitions.CharTpe) ||
+              (v.tree.tpe <:< definitions.DoubleTpe) ||
+              (v.tree.tpe <:< definitions.FloatTpe) ||
+              (v.tree.tpe <:< definitions.LongTpe) ||
+              (v.tree.tpe <:< definitions.ShortTpe) ||
+              (v.tree.tpe <:< definitions.AnyRefTpe)
+            )) {
+              // Not all Int -> new HArray2
+              ctx.Expr(
+                Apply(
+                  Select(
+                    New(
+                      AppliedTypeTree(
+                        Ident(_HArray2),
+                        vs.iterator.map(n => TypeTree(n.tree.tpe.widen)).toList
+                      )
+                    ),
+                    nme.CONSTRUCTOR
+                  ),
+                  vs.iterator.map(_.tree).toList
+                )
+              )
+            } else {
+              // Unknown Intness -> Defer decision to runtime via HArray.unsafe
+              ctx.Expr(
+                Apply(
+                  TypeApply(
+                    Select(Ident(_HArray), newTermName("unsafe")),
                     List(
                       vs.foldRight[Tree](Select(Ident(_HList), newTypeName("HNil"))) { case (n, z) =>
                         AppliedTypeTree(Ident(_HCons), List(TypeTree(n.tree.tpe.widen), z))
                       }
                     )
+                  ),
+                  List(
+                    Apply(
+                      Apply(
+                        TypeApply(
+                          Select(Ident(_Array), newTermName("apply")),
+                          List(Ident(definitions.AnyClass))
+                        ),
+                        vs.map(_.tree).toList
+                      ),
+                      List(Select(Ident(_Predef), newTermName("implicitly")))
+                    )
                   )
+                )
+              )
+            }
+          } else {
+            // new HArrayA
+            ctx.Expr(
+              Apply(
+                Select(
+                  New(
+                    AppliedTypeTree(
+                      Ident(_HArrayA),
+                      List(
+                        vs.foldRight[Tree](Select(Ident(_HList), newTypeName("HNil"))) { case (n, z) =>
+                          AppliedTypeTree(Ident(_HCons), List(TypeTree(n.tree.tpe.widen), z))
+                        }
+                      )
+                    )
+                  ),
+                  nme.CONSTRUCTOR
                 ),
-                nme.CONSTRUCTOR
-              ),
-              List(
-                Apply(
-                  Apply(Select(Ident(_Array), newTermName("apply")), vs.map(_.tree).toList),
-                  List(Select(Ident(_Predef), newTermName("implicitly")))
+                List(
+                  Apply(
+                    Apply(Select(Ident(_Array), newTermName("apply")), vs.map(_.tree).toList),
+                    List(Select(Ident(_Predef), newTermName("implicitly")))
+                  )
                 )
               )
             )
-          })
+          }
       }
     }
   }
@@ -124,21 +179,38 @@ object HArray {
       List(natT)), List(Literal(Constant(idx))))
     ctx.Expr[Any](t)
   }
+
+  // HArray.apply and HArray.unsafe ensure that this always holds
+  @inline implicit def promoteHArrayII(h: HArray[Int ||: Int]) = h.asInstanceOf[HArrayII]
 }
 
 final class HArrayA[L <: HList](val a: Array[Any]) extends HArray[L] {
-  def length = Nat.unsafe[L#Length](a.length)
   def productArity = a.length
   def productElement(n: Int) = a(n)
 }
 
 final class HArray2[@specialized(Int, Long, Double, Char, Boolean, AnyRef) +T1,
     @specialized(Int, Long, Double, Char, Boolean, AnyRef) +T2](val _1: T1, val _2: T2) extends HArray[T1 ||: T2] {
-  def length = Nat._2
   def productArity = 2
   def productElement(n: Int) = n match {
     case 0 => _1
     case 1 => _2
     case _ => throw new NoSuchElementException
   }
+}
+
+final class HArrayII(val packed: Long) extends AnyVal with HArray[Int ||: Int] {
+  def productArity = 2
+  def productElement(n: Int) = n match {
+    case 0 => _1
+    case 1 => _2
+    case _ => throw new NoSuchElementException
+  }
+  @inline def _1 = (packed >> 32).toInt
+  @inline def _2 = packed.toInt
+}
+
+object HArrayII {
+  @inline def apply(_1: Int, _2: Int): HArrayII =
+    new HArrayII((_1.toLong << 32) | (_2 & 0xffffffffL))
 }
