@@ -10,6 +10,6 @@ scalacOptions ++= Seq("-deprecation", "-unchecked", "-optimise")
 
 //scalacOptions ++= Seq("-deprecation", "-unchecked", "-uniqid", "-Xprint:typer")
 
-libraryDependencies += "com.novocode" % "junit-interface" % "0.10-M4" % "test"
+libraryDependencies += "com.novocode" % "junit-interface" % "0.10" % "test"
 
 libraryDependencies <+= scalaVersion("org.scala-lang" % "scala-compiler" % _ % "compile")

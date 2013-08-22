@@ -1,6 +1,7 @@
 package com.novocode.erased
 
-import scala.annotation.tailrec
+import scala.language.experimental.macros
+import scala.reflect.macros.Context
 
 /** Church Numerals
  * 
@@ -43,6 +44,11 @@ sealed trait Nat {
   def _7 = (_0 + Nat._7): _7
   def _8 = (_0 + Nat._8): _8
   def _9 = (_0 + Nat._9): _9
+
+  override def equals(o: Any) = o match {
+    case n: Nat => value == n.value
+    case _ => false
+  }
 }
 
 object Nat {
@@ -71,6 +77,29 @@ object Nat {
   val _9 = new Succ(9).asInstanceOf[_9]
   val _10 = new Succ(10).asInstanceOf[_10]
   private[this] val cached = Array(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10)
+
+  def apply(i: Int): Nat = macro Nat.applyImpl
+  def applyImpl(ctx: Context)(i: ctx.Expr[Int]): ctx.Expr[Nat] = {
+    import ctx.universe._
+    println(showRaw(i.tree))
+    val _Nat = typeOf[Nat.type].typeSymbol.companionSymbol
+    val _Succ = typeOf[Succ[_]].typeSymbol
+    val _Zero = typeOf[Zero.type].typeSymbol.companionSymbol
+
+    i.tree match {
+      case Literal(Constant(v: Int)) =>
+        val tt = (1 to v).foldLeft[Tree](SingletonTypeTree(Ident(_Zero))) { case (z, _) =>
+          AppliedTypeTree(Ident(_Succ), List(z))
+        }
+        ctx.Expr(
+          Apply(
+            TypeApply(
+              Select(Ident(_Nat), newTermName("unsafe")),
+              List(tt)),
+            List(Literal(Constant(v)))))
+      case _ => reify(Nat.unsafe[Nat](i.splice))
+    }
+  }
 }
 
 final object Zero extends Nat {

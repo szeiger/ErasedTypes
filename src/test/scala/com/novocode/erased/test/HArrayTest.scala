@@ -17,6 +17,11 @@ class HArrayTest {
     println(v1(Nat._1): Int)
     println(v1(Nat._2): Boolean)
 
+    // Access by macro-generated Nat index (0-based)
+    println(v1(Nat(0)): String)
+    println(v1(Nat(1)): Int)
+    println(v1(Nat(2)): Boolean)
+
     // Access by macro-generated accessors (1-based)
     println(v1._1: String)
     println(v1._2: Int)
