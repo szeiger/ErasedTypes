@@ -3,14 +3,14 @@ package com.novocode.erased
 import scala.language.dynamics
 import scala.language.experimental.macros
 import scala.reflect.macros.Context
-import HList._
+import syntax._
 
 // HArray
 
 sealed trait HArray[+L <: HList] extends Any with Product with Dynamic {
   @inline final def apply[N <: Nat](n: N) = productElement(n.value).asInstanceOf[L#Apply[N]]
   @inline final def unsafeApply[N <: Nat](n: Int): L#Apply[N] = productElement(n).asInstanceOf[L#Apply[N]]
-  @inline final def length: L#Length = Nat.unsafe[L#Length](productArity)
+  @inline final def length: L#Length = Nat._unsafe[L#Length](productArity)
   final def canEqual(that: Any) = that.isInstanceOf[HArray[_]]
   override def equals(that: Any): Boolean = that match {
     case h: HArray[_] =>
@@ -67,6 +67,7 @@ object HArray {
           val _HArrayA = typeOf[HArrayA[_]].typeSymbol
           val _HArray2 = typeOf[HArray2[_,_]].typeSymbol
           val _HList = typeOf[HList].typeSymbol.companionSymbol
+          val _HNil = typeOf[HNil.type].typeSymbol
           val _HCons = typeOf[HCons[_, _]].typeSymbol
           val _Array = typeOf[Array[_]].typeSymbol.companionSymbol
           val _Predef = typeOf[Predef.type].typeSymbol.companionSymbol
@@ -108,7 +109,7 @@ object HArray {
                   TypeApply(
                     Select(Ident(_HArray), newTermName("unsafe")),
                     List(
-                      vs.foldRight[Tree](Select(Ident(_HList), newTypeName("HNil"))) { case (n, z) =>
+                      vs.foldRight[Tree](Ident(_HNil)) { case (n, z) =>
                         AppliedTypeTree(Ident(_HCons), List(TypeTree(n.tree.tpe.widen), z))
                       }
                     )
@@ -137,7 +138,7 @@ object HArray {
                     AppliedTypeTree(
                       Ident(_HArrayA),
                       List(
-                        vs.foldRight[Tree](Select(Ident(_HList), newTypeName("HNil"))) { case (n, z) =>
+                        vs.foldRight[Tree](Ident(_HNil)) { case (n, z) =>
                           AppliedTypeTree(Ident(_HCons), List(TypeTree(n.tree.tpe.widen), z))
                         }
                       )
@@ -181,7 +182,7 @@ object HArray {
   }
 
   // HArray.apply and HArray.unsafe ensure that this always holds
-  @inline implicit def promoteHArrayII(h: HArray[Int ||: Int]) = h.asInstanceOf[HArrayII]
+  @inline implicit def promoteHArrayII(h: HArray[Int :|: Int]) = h.asInstanceOf[HArrayII]
 }
 
 final class HArrayA[L <: HList](val a: Array[Any]) extends HArray[L] {
@@ -190,7 +191,7 @@ final class HArrayA[L <: HList](val a: Array[Any]) extends HArray[L] {
 }
 
 final class HArray2[@specialized(Int, Long, Double, Char, Boolean, AnyRef) +T1,
-    @specialized(Int, Long, Double, Char, Boolean, AnyRef) +T2](val _1: T1, val _2: T2) extends HArray[T1 ||: T2] {
+    @specialized(Int, Long, Double, Char, Boolean, AnyRef) +T2](val _1: T1, val _2: T2) extends HArray[T1 :|: T2] {
   def productArity = 2
   def productElement(n: Int) = n match {
     case 0 => _1
@@ -199,7 +200,7 @@ final class HArray2[@specialized(Int, Long, Double, Char, Boolean, AnyRef) +T1,
   }
 }
 
-final class HArrayII(val packed: Long) extends AnyVal with HArray[Int ||: Int] {
+final class HArrayII(val packed: Long) extends AnyVal with HArray[Int :|: Int] {
   def productArity = 2
   def productElement(n: Int) = n match {
     case 0 => _1

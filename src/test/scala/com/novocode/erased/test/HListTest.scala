@@ -2,11 +2,12 @@ package com.novocode.erased.test
 
 import org.junit.Test
 import com.novocode.erased._
+import syntax._
 
 class HListTest {
   @Test
   def testHList {
-    val l1 = 42 |: "foo" |: Some(1.0) |: "bar" |: HNil
+    val l1 = 42 :: "foo" :: Some(1.0) :: "bar" :: HNil
     val l1a = l1.head
     val l1b = l1.tail.head
     val l1c = l1.tail.tail.head
@@ -29,10 +30,10 @@ class HListTest {
     println((l1.length, l2.length))
 
     import HList._
-    val l3a = "foo" |: 42 |: HNil
-    val l3b = true |: "baz" |: Some(1.0) |: HNil
-    val l3 = l3a |:: l3b
-    println(l3 : String |: Int |: Boolean |: String ||: Some[Double])
+    val l3a = "foo" :: 42 :: HNil
+    val l3b = true :: "baz" :: Some(1.0) :: HNil
+    val l3 = l3a ::: l3b
+    println(l3: String :: Int :: Boolean :: String :|: Some[Double])
 
     val l4 = new HCons(42, new HCons(10.0d, HNil))
     println(l4.getClass)

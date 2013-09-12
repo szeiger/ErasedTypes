@@ -38,7 +38,7 @@ sealed trait KList { kl =>
   final def length: Length = {
     var i = 0
     foreach { _ => i += 1 }
-    Nat.unsafe[Length](i)
+    Nat._unsafe[Length](i)
   }
   final def |: [E](elem: Self#Cons[E]): |: [E] = new KCons[Self#Cons, E, Self](elem, self)
   final def |:: [O <: LikeThis](o: O): |:: [O] = o.fold[O#LikeThis, ({ type L[X <: O#LikeThis, Z <: O#LikeThis] = Z # |: [X#Head] })#L, Self](

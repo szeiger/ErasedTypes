@@ -1,69 +1,145 @@
 package com.novocode.erased
 
+import scala.language.higherKinds
+import scala.language.experimental.macros
 import scala.annotation.unchecked.{uncheckedVariance => uv}
+import scala.reflect.macros.Context
 
-// HList
-
-sealed trait HList {
+/** A heterogenous list where each element has its own type. */
+sealed abstract class HList extends Product {
+  /** The type of this HList object */
   type Self <: HList
+  /** The type of the first element */
   type Head
+  /** The type of the tail of this HList */
   type Tail <: HList
+  /** The type of a Fold operation on this HList */
   type Fold[U, F[_ <: HList, _ <: U] <: U, Z <: U] <: U
-  
+
+  /** Drop the first N elements from this HList and return the resulting type */
   type Drop[N <: Nat] = N#Fold[HList, ({ type L[X <: HList] = X#Tail })#L, Self]
+  /** Get the type of the Nth element of this HList */
   type Apply[N <: Nat] = ({ type L[X <: HList] = X#Head })#L[Drop[N]] // Drop[N]#Head
+  /** Get the Nat type of the length of this HList */
   type Length = Fold[Nat, ({ type L[X <: HList, Z <: Nat] = Succ[Z] })#L, Nat._0]
-  type |: [E] = HCons[E, Self]
-  type |:: [L <: HList] = L#Fold[HList, ({ type L[X <: HList, Z <: HList] = Z # |: [X#Head] })#L, Self] 
+  /** The type of prepending an element of type E to this HList */
+  type :: [E] = HCons[E, Self]
+  /** The type of concatenating another HList with this HList */
+  type ::: [L <: HList] = L#Fold[HList, ({ type L[X <: HList, Z <: HList] = Z # :: [X#Head] })#L, Self]
 
+  /** Get the first element, or throw a NoSuchElementException if this HList is empty. */
   def head: Head
+  /** Get the tail of the list, or throw a NoSuchElementException if this HList is empty. */
   def tail: Tail
+  /** Return this HList typed as `Self`/ */
   def self: Self
+  /** Fold the elements of this HList. */
   def fold[U, F[_ <: HList, _ <: U] <: U, Z <: U](f: TypedFunction2[HList, U, U, F], z: Z): Fold[U, F, Z]
+  /** Check if this HList is non-empty. */
+  def isDefined: Boolean
+  /** Convert this HList to a `List[Any]`. */
+  def toList: List[Any]
 
-  final def length: Length = {
+  /** Check if this list is empty. */
+  final def isEmpty = !isDefined
+
+  /** Get the length of this list as a `Nat`. */
+  @inline final def length: Length = Nat._unsafe[Length](size)
+  /** Get the length of this list as an `Int`. */
+  @inline final def size = productArity
+  final def productArity: Int = {
     var i = 0
-    foreach { _ => i += 1 }
-    Nat.unsafe[Length](i)
+    var h = this
+    while(h.isDefined) {
+      i += 1
+      h = h.tail
+    }
+    i
   }
-  final def |: [@specialized E](elem: E): |: [E] = new HCons[E, Self](elem, this.asInstanceOf[Self])
-  final def |:: [L <: HList](l: L): |:: [L] = l.fold[HList, ({ type L[X <: HList, Z <: HList] = Z # |: [X#Head] })#L, Self](
-      new TypedFunction2[HList, HList, HList, ({ type L[X <: HList, Z <: HList] = Z # |: [X#Head] })#L] {
-        def apply[P1 <: HList, P2 <: HList](p1: P1, p2: P2) = p1.head |: p2
-      }, self)
 
-  final def drop [N <: Nat](n: N): Drop[N] = {
-    var t: HList = this
-    var i = n.value
-    while(i > 0) {
-      i -= 1
-      t = t.asInstanceOf[HCons[_,_ <: HList]].tail 
+  /** Prepend an element to this HList, returning a new HList. */
+  @inline final def :: [@specialized E](elem: E): :: [E] = new HCons[E, Self](elem, this.asInstanceOf[Self])
+  /** Concatenate another HList to this HList, returning a new HList. */
+  final def ::: [L <: HList](l: L): ::: [L] = l.fold[HList, ({ type L[X <: HList, Z <: HList] = Z # :: [X#Head] })#L, Self](
+    new TypedFunction2[HList, HList, HList, ({ type L[X <: HList, Z <: HList] = Z # :: [X#Head] })#L] {
+      def apply[P1 <: HList, P2 <: HList](p1: P1, p2: P2) = p1.head :: p2
+    }, self)
+
+  /** Drop the first `n` elements from this HList. */
+  @inline final def drop [N <: Nat](n: N): Drop[N] = drop(n.value).asInstanceOf[Drop[N]]
+  /** Drop the first `n` elements from this HList. */
+  final def drop(i: Int): HList = {
+    var h = this
+    var ii = i
+    while(ii > 0) {
+      ii -= 1
+      h = h.tail
     }
-    t
-  }.asInstanceOf[Drop[N]]
-  final def apply [N <: Nat](n: N) = drop(n).head.asInstanceOf[Apply[N]]
+    h
+  }
+
+  final def productElement(i: Int): Any = drop(i).head
+
+  @inline final def _unsafeApply [N <: Nat](i: Int): Apply[N] = productElement(i).asInstanceOf[Apply[N]]
+  /** Return the nth element from this HList, using the correct return type. */
+  @inline final def apply [N <: Nat](n: N): Apply[N] = _unsafeApply[N](n.value)
+  /** Return the nth element from this HList, using the correct return type if n is a literal, otherwise Any. */
+  final def apply(n: Int): Any = macro HList.applyImpl
+
+  /** Evaluate a function for each element of this HList. */
   final def foreach(f: Any => Unit) {
-    var n: HList = this
-    while(n.isInstanceOf[HCons[_,_]]) {
-      val c = n.asInstanceOf[HCons[_, _ <: HList]]
-      f(c.head)
-      n = c.tail
+    var h = this
+    while(h.isDefined) {
+      f(h.head)
+      h = h.tail
     }
   }
+
   override final def toString = {
     val b = new StringBuffer
     foreach { v =>
-      b append v append " |: "
-    }
-    b append "HNil"
-    b toString
+      v match {
+        case h: HList =>
+          b.append("(").append(v).append(")")
+        case _ =>
+          b.append(v)
+      }
+      b.append(" :: ") }
+    b.append("HNil").toString
   }
+
+  override final lazy val hashCode: Int = toList.hashCode
+  override final def equals(that: Any) = that match {
+    case that: HList => toList == that.toList
+    case _ => false
+  }
+  final def canEqual(that: Any) = that.isInstanceOf[HList]
 }
 
 final object HList {
-  type HNil = HNil.type
-  type |: [+H, +T <: HList] = HCons[H, T]
-  type ||: [+H, +N] = HCons[H, HCons[N, HNil]]
+  import syntax._
+
+  def applyImpl(ctx: Context { type PrefixType = HList })(n: ctx.Expr[Int]): ctx.Expr[Any] = {
+    import ctx.universe._
+    val _Succ = typeOf[Succ[_]].typeSymbol
+    val _Zero = reify(Zero).tree
+    n.tree match {
+      case t @ Literal(Constant(v: Int)) =>
+        val tt = (1 to v).foldLeft[Tree](SingletonTypeTree(_Zero)) { case (z, _) =>
+          AppliedTypeTree(Ident(_Succ), List(z))
+        }
+        ctx.Expr(
+          Apply(
+            TypeApply(
+              Select(ctx.prefix.tree, newTermName("_unsafeApply")),
+              List(tt)
+            ),
+            List(t)
+          )
+        )
+      case _ => reify(ctx.prefix.splice.productElement(n.splice))
+    }
+  }
 }
 
 final class HCons[@specialized +H, +T <: HList](val head: H, val tail: T) extends HList {
@@ -75,6 +151,12 @@ final class HCons[@specialized +H, +T <: HList](val head: H, val tail: T) extend
   def self = this
   def fold[U, F[_ <: HList, _ <: U] <: U, Z <: U](f: TypedFunction2[HList, U, U, F], z: Z): Fold[U, F, Z] @uv =
     f.apply[Self, T#Fold[U, F, Z]](self, tail.fold[U, F, Z](f, z))
+  def toList: List[Any] = head :: tail.toList
+  def isDefined = true
+}
+
+object HCons {
+  def unapply[H, T <: HList](l: HCons[H, T]) = Some((l.head, l.tail))
 }
 
 final object HNil extends HList {
@@ -84,7 +166,9 @@ final object HNil extends HList {
   type Fold[U, F[_ <: HList, _ <: U] <: U, Z <: U] = Z
 
   def self = HNil
-  def head = sys.error("HNil.head")
-  def tail = sys.error("HNil.tail")
+  def head = throw new NoSuchElementException("HNil.head")
+  def tail = throw new NoSuchElementException("HNil.tail")
   def fold[U, F[_ <: HList, _ <: U] <: U, Z <: U](f: TypedFunction2[HList, U, U, F], z: Z) = z
+  def toList = Nil
+  def isDefined = false
 }
