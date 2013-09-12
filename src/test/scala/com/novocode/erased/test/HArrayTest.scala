@@ -59,10 +59,10 @@ class HArrayTest {
   }
 
   @Test def testSpecialization {
-    val h1 = HArray("foo", 42, true)
+    val h1 = HArray("foo", 42, true, false)
     val h2 = HArray("foo", 42)
 
-    val h1t: HArrayA[String :: Int :|: Boolean] = h1
+    val h1t: HArrayA[String :: Int :: Boolean :|: Boolean] = h1
     val h2t: HArray2[String, Int] = h2
 
     val i: Int = h2t._2
@@ -84,4 +84,13 @@ class HArrayTest {
   }
 
   def addInts(ii: HArrayII): Int = ii._1 + ii._2
+
+  @Test def testFunctions {
+    def applyN[H <: HArray[_], R](h: H)(f: h. -> [R]): R = h -> f
+
+    assertEquals(2, applyN(HArray(1, 2))((a, b) => (a*b)))
+    assertEquals("12", applyN(HArray(1, 2))(((a: Any), (b: Any)) => (""+a+b)))
+    assertEquals(6, applyN(HArray(1, 2, 3))((a, b, c) => (a*b*c)))
+    assertEquals(24, applyN(HArray(1, 2, 3, 4))(h => (h._1 * h._2 * h._3 * h._4)))
+  }
 }

@@ -2,12 +2,15 @@ package com.novocode.erased
 
 import scala.language.dynamics
 import scala.language.experimental.macros
+import scala.annotation.unchecked.{uncheckedVariance => uv}
 import scala.reflect.macros.Context
 import syntax._
 
 // HArray
 
 sealed trait HArray[+L <: HList] extends Any with Product with Dynamic {
+  type -> [R]
+  def -> [R](f: -> [R]): R
   @inline final def apply[N <: Nat](n: N) = productElement(n.value).asInstanceOf[L#Apply[N]]
   @inline final def unsafeApply[N <: Nat](n: Int): L#Apply[N] = productElement(n).asInstanceOf[L#Apply[N]]
   @inline final def length: L#Length = Nat._unsafe[L#Length](productArity)
@@ -50,8 +53,10 @@ object HArray {
       if(_1.isInstanceOf[Int] && _2.isInstanceOf[Int])
         HArrayII(_1.asInstanceOf[Int], _2.asInstanceOf[Int])
       else new HArray2[Any, Any](_1, _2)
-    }.asInstanceOf[HArray[L]] else new HArrayA[L](a)
-  }
+    }
+    else if(a.length == 3) new HArray3[Any, Any, Any](a(0), a(1), a(2))
+    else new HArrayA[L](a)
+  }.asInstanceOf[HArray[L]]
 
   def apply(vs: Any*) = macro HArray.applyImpl
 
@@ -66,6 +71,7 @@ object HArray {
           val _HArray = typeOf[HArray[_]].typeSymbol.companionSymbol
           val _HArrayA = typeOf[HArrayA[_]].typeSymbol
           val _HArray2 = typeOf[HArray2[_,_]].typeSymbol
+          val _HArray3 = typeOf[HArray3[_,_,_]].typeSymbol
           val _HList = typeOf[HList].typeSymbol.companionSymbol
           val _HNil = typeOf[HNil.type].typeSymbol
           val _HCons = typeOf[HCons[_, _]].typeSymbol
@@ -116,19 +122,31 @@ object HArray {
                   ),
                   List(
                     Apply(
-                      Apply(
-                        TypeApply(
-                          Select(Ident(_Array), newTermName("apply")),
-                          List(Ident(definitions.AnyClass))
-                        ),
-                        vs.map(_.tree).toList
+                      TypeApply(
+                        Select(Ident(_Array), newTermName("apply")),
+                        List(Ident(definitions.AnyClass))
                       ),
-                      List(Select(Ident(_Predef), newTermName("implicitly")))
+                      vs.map(_.tree).toList
                     )
                   )
                 )
               )
             }
+          } else if(vs.length == 3) {
+            ctx.Expr(
+              Apply(
+                Select(
+                  New(
+                    AppliedTypeTree(
+                      Ident(_HArray3),
+                      vs.iterator.map(n => TypeTree(n.tree.tpe.widen)).toList
+                    )
+                  ),
+                  nme.CONSTRUCTOR
+                ),
+                vs.iterator.map(_.tree).toList
+              )
+            )
           } else {
             // new HArrayA
             ctx.Expr(
@@ -147,10 +165,7 @@ object HArray {
                   nme.CONSTRUCTOR
                 ),
                 List(
-                  Apply(
-                    Apply(Select(Ident(_Array), newTermName("apply")), vs.map(_.tree).toList),
-                    List(Select(Ident(_Predef), newTermName("implicitly")))
-                  )
+                  Apply(Select(Ident(_Array), newTermName("apply")), vs.map(_.tree).toList)
                 )
               )
             )
@@ -183,15 +198,25 @@ object HArray {
 
   // HArray.apply and HArray.unsafe ensure that this always holds
   @inline implicit def promoteHArrayII(h: HArray[Int :|: Int]) = h.asInstanceOf[HArrayII]
+  @inline implicit def promoteHArray2[T1, T2](h: HArray[T1 :|: T2]) = h.asInstanceOf[HArray2[T1, T2]]
+  @inline implicit def promoteHArray3[T1, T2, T3](h: HArray[T1 :: T2 :|: T3]) = h.asInstanceOf[HArray3[T1, T2, T3]]
 }
 
 final class HArrayA[L <: HList](val a: Array[Any]) extends HArray[L] {
+  type -> [R] = HArrayA.FunctionA[L, R]
+  def -> [R](f: -> [R]): R = f(this)
   def productArity = a.length
   def productElement(n: Int) = a(n)
 }
 
+object HArrayA {
+  type FunctionA[L <: HList, R] = HArrayA[L] => R
+}
+
 final class HArray2[@specialized(Int, Long, Double, Char, Boolean, AnyRef) +T1,
     @specialized(Int, Long, Double, Char, Boolean, AnyRef) +T2](val _1: T1, val _2: T2) extends HArray[T1 :|: T2] {
+  type -> [R] = (T1 @uv, T2 @uv) => R
+  def -> [R](f: -> [R]): R = f(_1, _2)
   def productArity = 2
   def productElement(n: Int) = n match {
     case 0 => _1
@@ -200,7 +225,23 @@ final class HArray2[@specialized(Int, Long, Double, Char, Boolean, AnyRef) +T1,
   }
 }
 
+final class HArray3[@specialized(Int, Long, Double, Char, Boolean, AnyRef) +T1,
+    @specialized(Int, Long, Double, Char, Boolean, AnyRef) +T2,
+    @specialized(Int, Long, Double, Char, Boolean, AnyRef) +T3](val _1: T1, val _2: T2, val _3: T3) extends HArray[T1 :: T2 :|: T3] {
+  type -> [R] = (T1 @uv, T2 @uv, T3 @uv) => R
+  def -> [R](f: -> [R]): R = f(_1, _2, _3)
+  def productArity = 3
+  def productElement(n: Int) = n match {
+    case 0 => _1
+    case 1 => _2
+    case 2 => _3
+    case _ => throw new NoSuchElementException
+  }
+}
+
 final class HArrayII(val packed: Long) extends AnyVal with HArray[Int :|: Int] {
+  type -> [R] = (Int, Int) => R
+  def -> [R](f: -> [R]): R = f(_1, _2)
   def productArity = 2
   def productElement(n: Int) = n match {
     case 0 => _1
