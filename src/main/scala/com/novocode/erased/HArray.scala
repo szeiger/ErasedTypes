@@ -60,7 +60,7 @@ object HArray {
 
   def apply(vs: Any*) = macro HArray.applyImpl
 
-  def applyImpl(ctx: Context)(vs: ctx.Expr[Any]*): ctx.Expr[HArray[_]] = {
+  def applyImpl(ctx: Context)(vs: ctx.Expr[Any]*): ctx.Expr[HArray[A]] forSome { type A } = {
     import ctx.universe._
     if(vs.isEmpty) reify(unsafe[HNil](Array[Any]()))
     else {
