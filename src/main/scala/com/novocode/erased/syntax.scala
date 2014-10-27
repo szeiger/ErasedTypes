@@ -17,4 +17,6 @@ object syntax {
 
   type Zero = com.novocode.erased.Zero.type
   type HNil = com.novocode.erased.HNil.type
+  type True = com.novocode.erased.True.type
+  type False = com.novocode.erased.False.type
 }

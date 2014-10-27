@@ -11,18 +11,18 @@ import scala.reflect.macros.Context
   * `Int` values, similar to `java.lang.Integer`. */
 abstract class Nat {
   /** The type of this Nat object. */
-  type Self <: Nat
+  type This >: this.type <: Nat
   /** The type of a folding operation on this Nat. */
   type Fold[U, F[_ <: U] <: U, Z <: U] <: U
   /** Add another Nat to this one. */
-  type + [_ <: Nat] <: Nat
+  type + [N <: Nat] = Fold[Nat, ({ type L[X <: Nat] = Succ[X] })#L, N]
   /** Multiply another Nat with this one. */
   type * [_ <: Nat] <: Nat
   type Flip_^ [_ <: Nat] <: Nat
   /** Raise this Nat to the exponent given by another Nat. */
-  type ^ [T <: Nat] = T # Flip_^[Self]
+  type ^ [T <: Nat] = T # Flip_^[This]
   /** Increment this Nat. */
-  type ++ = Succ[Self]
+  type ++ = Succ[This]
 
   /** Increment this Nat. */
   def ++ = Nat._unsafe[++](value+1)
@@ -34,8 +34,13 @@ abstract class Nat {
   def ^ [T <: Nat](n: T): ^[T] = Nat._unsafe[^[T]](scala.math.pow(value, n.value).asInstanceOf[Int])
   /** The equivalent Int value for this Nat. */
   def value: Int
-  /** This Nat, typed as Self. */
-  def self: Self
+
+  type IsZero <: Bool
+  type IfZero[U, Z <: U, F[_ <: Nat] <: U] <: U
+  type Eq[Other <: Nat] <: Bool
+
+  def eq[Other <: Nat](o: Other): Eq[Other] =
+    (if(value == o.value) True else False).asInstanceOf[Eq[Other]]
 
   override def toString = value.toString
   override def equals(o: Any) = o match {
@@ -45,7 +50,7 @@ abstract class Nat {
   override def hashCode = value
 
   /** Multiply this Nat by 10. */
-  type _0 = Self # * [Nat._10]
+  type _0 = This # * [Nat._10]
   /** Multiply this Nat by 10, then add 1. */
   type _1 = _0 # + [Nat._1]
   /** Multiply this Nat by 10, then add 2. */
@@ -65,7 +70,7 @@ abstract class Nat {
   /** Multiply this Nat by 10, then add 9. */
   type _9 = _0 # + [Nat._9]
   /** Multiply this Nat by 10. */
-  def _0 = (self * Nat._10): _0
+  def _0 = (this * Nat._10): _0
   /** Multiply this Nat by 10, then add 1. */
   def _1 = (_0 + Nat._1): _1
   /** Multiply this Nat by 10, then add 2. */
@@ -161,22 +166,26 @@ object Nat {
 }
 
 final object Zero extends Nat {
-  type Self = Zero.type
+  type This = Zero.type
   type Fold[U, F[_ <: U] <: U, Z <: U] = Z
-  type + [X <: Nat] = X
   type * [_ <: Nat] = Nat._0
   type Flip_^ [_ <: Nat] = Nat._1
   def value = 0
-  def self = this
+
+  type IsZero = True.type
+  type IfZero[U, Z <: U, F[_ <: Nat] <: U] = Z
+  type Eq[Other <: Nat] = Other#IsZero
 }
 
 final class Succ[N <: Nat] private[erased] (val value: Int) extends Nat {
-  type Self = Succ[N]
+  type This = Succ[N]
   type -- = N
   type Fold[U, F[_ <: U] <: U, Z <: U] = F[N#Fold[U, F, Z]]
-  type + [X <: Nat] = Succ[N # + [X]]
   type * [X <: Nat] = (N # * [X]) # + [X]
   type Flip_^ [X <: Nat] = (N # Flip_^ [X]) # * [X]
   def -- : -- = Nat._unsafe[--](value-1)
-  def self = this
+
+  type IsZero = False.type
+  type IfZero[U, Z <: U, F[_ <: Nat] <: U] = F[N]
+  type Eq[Other <: Nat] = Other#IfZero[Bool, False.type, ({ type L[X <: Nat] = N#Eq[X] })#L]
 }

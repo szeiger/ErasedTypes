@@ -2,7 +2,7 @@ package com.novocode.erased.test
 
 import org.junit.Test
 import org.junit.Assert._
-import com.novocode.erased.Nat
+import com.novocode.erased._
 
 class NatTest {
   @Test
@@ -23,6 +23,9 @@ class NatTest {
     implicitly[(_1 # * [_10] # + [_6]) =:= (_4 # * [_4])]
     
     val x: List[List[List[String]]] = (null: _3#Fold[Any, List, String])
+
+    implicitly[ _1._6 # Eq[_4 # * [_4]] =:= True.type  ]
+    implicitly[ _1._7 # Eq[_4 # * [_4]] =:= False.type ]
   }
 
   @Test

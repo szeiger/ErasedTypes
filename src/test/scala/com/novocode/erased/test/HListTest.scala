@@ -21,7 +21,7 @@ class HListTest {
     val e2b: Option[Double] = l1.drop(Nat._2).head
 
     val x1 = null : l1.type#Tail#Tail#Tail#Head
-    val x2 = null : Nat._3#Fold[HList, ({ type L[X <: HList] = X#Tail })#L, l1.type#Self]#Head
+    val x2 = null : Nat._3#Fold[HList, ({ type L[X <: HList] = X#Tail })#L, l1.type#This]#Head
     val x3: Option[Double] = null : l1.type#Drop[Nat._2]#Head
 
     implicitly[l1.Length =:= Nat._4]
